@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Plupload使用指南</title>
+    <!-- 首先需要引入plupload的源代码 -->
+    <script src="{{ static_url('plupload/plupload.full.min.js')}}"></script>
+    <script src="{{ static_url('qiniu/qiniu.js')}}"></script>
+    <style>
+    body {
+        margin: 0;
+    }
+    .container{
+        width: 600px;
+        min-height: 100vh;
+        margin: auto;
+        background: #eee;
+    }
+    #droparea {
+        min-height: 50px;
+        width: 300px;
+        background: #eee;
+        margin: auto;
+        padding: 10px;
+        text-align: center;
+        border: 1px solid #aaa;
+        box-sizing:border-box;
+    }
+    
+    #pickfiles {
+        display: block;
+        width: 300px;
+        height: 50px;
+        border: none;
+        background: #ccc;
+        margin: auto;
+    }
+    .progress{
+        margin:30px auto;
+        height: 5px;
+        width: 300px;
+        background:#ccc;
+    }
+    .progress-bar{
+        max-width: 100%;
+        height: 5px;
+        width: 0%;
+        background:green;
+    }
+    .display{
+        height: 300px;
+        width: 300px;
+        background: #eee;
+        margin: auto;
+        text-align: center;
+        border: 1px solid #aaa;
+        box-sizing:border-box;
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+    }
+    </style>
+</head>
+
+<body>
+    <!-- 这里我们只使用最基本的html结构：一个选择文件的按钮，一个开始上传文件的按钮(甚至该按钮也可以不要) -->
+    <div class="container" id="container">
+        <div id="droparea">拖放图片</div>
+        <button id="pickfiles">选择图片</button>
+        <div class="progress">
+            <div class="progress-bar"></div>
+            <div class="status"></div>
+        </div>
+        
+    </div>
+    <script>
+    //引入Plupload 、qiniu.js后
+    var uploader = Qiniu.uploader({
+        runtimes: 'html5,flash,html4', //上传模式,依次退化
+        browse_button: 'pickfiles', //上传选择的点选按钮，**必需**
+        uptoken_url: '/token', //Ajax请求upToken的Url，**强烈建议设置**（服务端提供）
+        // uptoken: "", //若未指定uptoken_url,则必须指定 uptoken ,uptoken由其他程序生成
+        // unique_names: true, // 默认 false，key为文件名。若开启该选项，SDK为自动生成上传成功后的key（文件名）。
+        save_key: true, // 默认 false。若在服务端生成uptoken的上传策略中指定了 `sava_key`，则开启，SDK会忽略对key的处理
+        domain: 'http://YOUR_BUCKET.qiniudn.com/', //bucket 域名，下载资源时用到，**必需**
+        get_new_uptoken: false, //设置上传文件的时候是否每次都重新获取新的token
+        container: 'container', //上传区域DOM ID，默认是browser_button的父元素，
+        max_file_size: '100mb', //最大文件体积限制
+        flash_swf_url: '../libs/plupload/Moxie.swf', //引入flash,相对路径
+        silverlight_xap_url: '../libs/plupload/Moxie.xap',
+        max_retries: 1, //上传失败最大重试次数
+        dragdrop: true, //开启可拖曳上传
+        drop_element: 'droparea', //拖曳上传区域元素的ID，拖曳文件或文件夹后可触发上传
+        chunk_size: '4mb', //分块上传时，每片的体积
+        auto_start: true, //选择文件后自动上传，若关闭需要自己绑定事件触发上传
+        init: {
+            'FilesAdded': function(up, files) {
+                console.log(up);
+                plupload.each(files, function(file) {
+                    document.getElementById('droparea').innerHTML += "<br>" + file.name;
+                    // 文件添加进队列后,处理相关的事情
+                });
+            },
+            'Key': function(up, file) {
+
+                // 若想在前端对每个文件的key进行个性化处理，可以配置该函数
+                // 该配置必须要在 unique_names: false , save_key: false 时才生效
+
+                // return key
+            },
+            'BeforeUpload': function(up, file) {
+                console.log("before-", file.name);
+            },
+            'UploadProgress': function(up, file) {
+                var progress = up.total.loaded / up.total.size * 100;
+
+
+                document.querySelector('.progress-bar').style.width = progress + "%";
+                document.querySelector('.status').innerText = (up.total.loaded/1000).toFixed(1)  + "Kb / " 
+                        +  (up.total.size/1000).toFixed(1) + "Kb ," + progress.toFixed(2) + "%";
+                    // 每个文件上传时,处理相关的事情
+            },
+            'UploadComplete': function() {
+                console.log("complete");
+                
+                //队列文件处理完毕后,处理相关的事情
+            },
+            'FileUploaded': function(up, file, info) {
+                // 每个文件上传成功后,处理相关的事情
+                // 其中 info 是文件上传成功后，服务端返回的json，形式如
+                // {
+                //    "hash": "Fh8xVqod2MQ1mocfI4S4KpRL6D98",
+                //    "key": "gogopher.jpg"
+                //  }
+
+                var domain = up.getOption('domain');
+                var res = JSON.parse(info);
+                var sourceLink = domain + res.key; //获取上传成功后的文件的Url
+
+
+                var temp = document.createElement("div");
+                temp.className = "display";
+                temp.style.backgroundImage = "url("+ sourceLink +")";
+                document.querySelector("#container").appendChild(temp);
+            },
+            'Error': function(up, err, errTip) {
+                //上传出错时,处理相关的事情
+                console.log("err-", errTip);
+            }
+
+        }
+    });
+
+
+    //最后给"开始上传"按钮注册事件
+    // document.getElementById('start_upload').onclick = function() {
+    //  uploader.start(); //调用实例对象的start()方法开始上传文件，当然你也可以在其他地方调用该方法
+    // }
+    </script>
+</body>
+
+</html>
